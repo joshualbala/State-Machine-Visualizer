@@ -1,7 +1,11 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
 import { simulate, type SimulationResult } from "../engine/simulate";
 import { stateMachineDefSchema, type StateMachineDef } from "../types/stateMachine";
+import { compileTypeScript, type CompileError, type TsSourceMap } from "../engine/tsCompiler";
 import { csvMachine } from "../examples/csvMachine";
+import { tsStarterSource } from "../examples/tsStarter";
+
+export type AuthoringMode = "json" | "typescript";
 
 function formatZodError(error: unknown): string[] {
   if (error && typeof error === "object" && "issues" in error) {
@@ -29,9 +33,17 @@ function parseMachineJson(text: string): { machine: StateMachineDef | null; erro
 }
 
 interface AppState {
+  authoringMode: AuthoringMode;
+
   machineJsonText: string;
-  machine: StateMachineDef | null;
   jsonErrors: string[];
+
+  tsSourceText: string;
+  tsErrors: CompileError[];
+  tsSourceMap: TsSourceMap | null;
+
+  machine: StateMachineDef | null;
+
   inputString: string;
   simulation: SimulationResult | null;
   currentStepIndex: number; // -1 = initial state, before any steps have run
@@ -39,9 +51,13 @@ interface AppState {
 }
 
 type Action =
+  | { type: "SET_MODE"; mode: AuthoringMode }
   | { type: "SET_JSON_TEXT"; text: string }
   | { type: "APPLY_JSON" }
   | { type: "LOAD_MACHINE"; machine: StateMachineDef }
+  | { type: "SET_TS_TEXT"; text: string }
+  | { type: "APPLY_TS" }
+  | { type: "LOAD_TS_EXAMPLE"; source: string }
   | { type: "SET_INPUT"; value: string }
   | { type: "RUN" }
   | { type: "GOTO_STEP"; index: number }
@@ -56,10 +72,19 @@ function machineToText(machine: StateMachineDef): string {
 }
 
 function initialState(): AppState {
+  const tsResult = compileTypeScript(tsStarterSource);
   return {
+    authoringMode: "json",
+
     machineJsonText: machineToText(csvMachine),
-    machine: csvMachine,
     jsonErrors: [],
+
+    tsSourceText: tsStarterSource,
+    tsErrors: tsResult.ok ? [] : tsResult.errors,
+    tsSourceMap: tsResult.ok ? tsResult.sourceMap : null,
+
+    machine: csvMachine,
+
     inputString: "a,bc",
     simulation: null,
     currentStepIndex: -1,
@@ -69,6 +94,9 @@ function initialState(): AppState {
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case "SET_MODE":
+      return { ...state, authoringMode: action.mode };
+
     case "SET_JSON_TEXT":
       return { ...state, machineJsonText: action.text };
 
@@ -94,6 +122,39 @@ function reducer(state: AppState, action: Action): AppState {
         currentStepIndex: -1,
         isPlaying: false,
       };
+
+    case "SET_TS_TEXT":
+      return { ...state, tsSourceText: action.text };
+
+    case "APPLY_TS": {
+      const result = compileTypeScript(state.tsSourceText);
+      if (!result.ok) {
+        return { ...state, tsErrors: result.errors, simulation: null, currentStepIndex: -1, isPlaying: false };
+      }
+      return {
+        ...state,
+        machine: result.machine,
+        tsErrors: [],
+        tsSourceMap: result.sourceMap,
+        simulation: null,
+        currentStepIndex: -1,
+        isPlaying: false,
+      };
+    }
+
+    case "LOAD_TS_EXAMPLE": {
+      const result = compileTypeScript(action.source);
+      return {
+        ...state,
+        tsSourceText: action.source,
+        machine: result.ok ? result.machine : state.machine,
+        tsErrors: result.ok ? [] : result.errors,
+        tsSourceMap: result.ok ? result.sourceMap : null,
+        simulation: null,
+        currentStepIndex: -1,
+        isPlaying: false,
+      };
+    }
 
     case "SET_INPUT":
       return { ...state, inputString: action.value, simulation: null, currentStepIndex: -1, isPlaying: false };

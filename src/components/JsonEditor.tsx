@@ -8,7 +8,7 @@ export function JsonEditor() {
   return (
     <div className="json-editor">
       <div className="json-editor__toolbar">
-        <h2>Machine definition</h2>
+        <h2>Machine definition (JSON)</h2>
         <div className="json-editor__buttons">
           <button type="button" onClick={() => dispatch({ type: "LOAD_MACHINE", machine: csvMachine })}>
             Load CSV example
