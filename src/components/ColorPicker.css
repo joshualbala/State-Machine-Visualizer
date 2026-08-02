@@ -1,0 +1,91 @@
+.color-picker {
+  position: relative;
+  margin-left: auto;
+}
+
+.color-picker__trigger {
+  padding: 4px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.color-picker__swatch {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.color-picker__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.color-picker__wheel {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: conic-gradient(
+    hsl(0 90% 58%),
+    hsl(60 90% 58%),
+    hsl(120 90% 58%),
+    hsl(180 90% 58%),
+    hsl(240 90% 58%),
+    hsl(300 90% 58%),
+    hsl(360 90% 58%)
+  );
+  cursor: crosshair;
+  touch-action: none;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.color-picker__wheel-center {
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--panel);
+  pointer-events: none;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.color-picker__knob {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--text-h);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.color-picker__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.color-picker__label {
+  font-size: 12px;
+  color: var(--muted);
+}

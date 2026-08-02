@@ -1,0 +1,105 @@
+:root {
+  --text: #33313b;
+  --text-h: #08060d;
+  --muted: #6b6976;
+  --bg: #f3f2f6;
+  --panel: #ffffff;
+  --panel-inset: #f6f5f9;
+  --border: #e2e0e7;
+  --node-bg: #ffffff;
+  --node-border: #c9c6d1;
+  --edge: #a8a5b2;
+  --accent-hue: 264;
+  --accent: hsl(var(--accent-hue) 90% 58%);
+  --accent-ring: color-mix(in srgb, var(--accent) 16%, transparent);
+  --node-bg-active: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  --accent-contrast: #ffffff;
+  --danger-bg: #fdecec;
+  --danger-text: #b3261e;
+
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #d6d4dc;
+    --text-h: #f4f3f7;
+    --muted: #918fa0;
+    --bg: #131319;
+    --panel: #1b1b23;
+    --panel-inset: #202029;
+    --border: #2d2d38;
+    --node-bg: #1f1f29;
+    --node-border: #46445a;
+    --edge: #5a586a;
+    --accent: hsl(var(--accent-hue) 85% 74%);
+    --accent-contrast: #1b0f2e;
+    --danger-bg: #3a1f20;
+    --danger-text: #ff9c96;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+h1,
+h2,
+h3 {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--panel-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+textarea,
+input {
+  font: inherit;
+}
