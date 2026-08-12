@@ -49,14 +49,17 @@
   font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 
-.state-inspector__vars td {
+.state-inspector__vars td,
+.state-inspector__vars th {
   padding: 4px 6px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
+  text-align: left;
 }
 
 .state-inspector__vars-key {
   color: var(--muted);
+  font-weight: normal;
   white-space: nowrap;
 }
 
@@ -85,13 +88,18 @@
   gap: 2px;
 }
 
-.state-inspector__history li {
+.state-inspector__history button {
+  width: 100%;
+  text-align: left;
   padding: 4px 8px;
   border-radius: 6px;
-  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
 }
 
-.state-inspector__history li:hover {
+.state-inspector__history button:hover {
   background: var(--panel-inset);
 }
 

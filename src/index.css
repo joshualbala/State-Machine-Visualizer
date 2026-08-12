@@ -13,7 +13,10 @@
   --accent: hsl(var(--accent-hue) 90% 58%);
   --accent-ring: color-mix(in srgb, var(--accent) 16%, transparent);
   --node-bg-active: color-mix(in srgb, var(--accent) 8%, var(--panel));
-  --accent-contrast: #ffffff;
+  /* Set dynamically per-hue by ColorPicker so accent text always clears WCAG AA contrast. */
+  --accent-contrast-light: #ffffff;
+  --accent-contrast-dark: #140c1f;
+  --accent-contrast: var(--accent-contrast-light);
   --danger-bg: #fdecec;
   --danger-text: #b3261e;
 
@@ -40,7 +43,7 @@
     --node-border: #46445a;
     --edge: #5a586a;
     --accent: hsl(var(--accent-hue) 85% 74%);
-    --accent-contrast: #1b0f2e;
+    --accent-contrast: var(--accent-contrast-dark);
     --danger-bg: #3a1f20;
     --danger-text: #ff9c96;
   }
@@ -102,4 +105,28 @@ button.primary:hover:not(:disabled) {
 textarea,
 input {
   font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Custom controls (drag wheel, resizer, etc.) manage their own focus ring inline since an
+   outline following a circle/thin bar reads poorly; this keeps default :focus-visible off
+   only for elements that opt in via this class, everything else keeps the outline above. */
+.focus-ring-inset:focus-visible {
+  outline-offset: -2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

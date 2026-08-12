@@ -22,7 +22,9 @@ function VariablesTable({ variables, changedKeys }: { variables: Record<string, 
       <tbody>
         {keys.map((key) => (
           <tr key={key} className={changedKeys.has(key) ? "state-inspector__vars-row--changed" : undefined}>
-            <td className="state-inspector__vars-key">{key}</td>
+            <th scope="row" className="state-inspector__vars-key">
+              {key}
+            </th>
             <td className="state-inspector__vars-value">{formatValue(variables[key])}</td>
           </tr>
         ))}
@@ -90,19 +92,26 @@ export function StateInspector() {
 
       <h2>History</h2>
       <ol className="state-inspector__history">
-        <li
-          className={currentStepIndex === -1 ? "state-inspector__history-item--active" : undefined}
-          onClick={() => dispatch({ type: "GOTO_STEP", index: -1 })}
-        >
-          (start)
+        <li>
+          <button
+            type="button"
+            className={currentStepIndex === -1 ? "state-inspector__history-item--active" : undefined}
+            aria-current={currentStepIndex === -1 ? "step" : undefined}
+            onClick={() => dispatch({ type: "GOTO_STEP", index: -1 })}
+          >
+            (start)
+          </button>
         </li>
         {simulation.steps.map((s, i) => (
-          <li
-            key={i}
-            className={i === currentStepIndex ? "state-inspector__history-item--active" : undefined}
-            onClick={() => dispatch({ type: "GOTO_STEP", index: i })}
-          >
-            {i + 1}. {historyLabel(s)}
+          <li key={i}>
+            <button
+              type="button"
+              className={i === currentStepIndex ? "state-inspector__history-item--active" : undefined}
+              aria-current={i === currentStepIndex ? "step" : undefined}
+              onClick={() => dispatch({ type: "GOTO_STEP", index: i })}
+            >
+              {i + 1}. {historyLabel(s)}
+            </button>
           </li>
         ))}
       </ol>

@@ -48,6 +48,8 @@ export type ConditionSpec = z.infer<typeof conditionSchema>;
 export const stateDefSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
+  /** When the machine enters this state, the run halts immediately and is flagged as errored. */
+  isError: z.boolean().optional(),
 });
 export type StateDef = z.infer<typeof stateDefSchema>;
 

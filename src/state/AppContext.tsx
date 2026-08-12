@@ -1,43 +1,10 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
 import { simulate, type SimulationResult } from "../engine/simulate";
-import { stateMachineDefSchema, type StateMachineDef } from "../types/stateMachine";
+import type { StateMachineDef } from "../types/stateMachine";
 import { compileTypeScript, type CompileError, type TsSourceMap } from "../engine/tsCompiler";
-import { csvMachine } from "../examples/csvMachine";
 import { tsStarterSource } from "../examples/tsStarter";
 
-export type AuthoringMode = "json" | "typescript";
-
-function formatZodError(error: unknown): string[] {
-  if (error && typeof error === "object" && "issues" in error) {
-    const issues = (error as { issues: { path: (string | number)[]; message: string }[] }).issues;
-    return issues.map((issue) => {
-      const path = issue.path.join(".");
-      return path ? `${path}: ${issue.message}` : issue.message;
-    });
-  }
-  return [String(error)];
-}
-
-function parseMachineJson(text: string): { machine: StateMachineDef | null; errors: string[] } {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (e) {
-    return { machine: null, errors: [`Invalid JSON: ${(e as Error).message}`] };
-  }
-  const result = stateMachineDefSchema.safeParse(raw);
-  if (!result.success) {
-    return { machine: null, errors: formatZodError(result.error) };
-  }
-  return { machine: result.data, errors: [] };
-}
-
 interface AppState {
-  authoringMode: AuthoringMode;
-
-  machineJsonText: string;
-  jsonErrors: string[];
-
   tsSourceText: string;
   tsErrors: CompileError[];
   tsSourceMap: TsSourceMap | null;
@@ -51,10 +18,6 @@ interface AppState {
 }
 
 type Action =
-  | { type: "SET_MODE"; mode: AuthoringMode }
-  | { type: "SET_JSON_TEXT"; text: string }
-  | { type: "APPLY_JSON" }
-  | { type: "LOAD_MACHINE"; machine: StateMachineDef }
   | { type: "SET_TS_TEXT"; text: string }
   | { type: "APPLY_TS" }
   | { type: "LOAD_TS_EXAMPLE"; source: string }
@@ -67,25 +30,16 @@ type Action =
   | { type: "PLAY" }
   | { type: "PAUSE" };
 
-function machineToText(machine: StateMachineDef): string {
-  return JSON.stringify(machine, null, 2);
-}
-
 function initialState(): AppState {
   const tsResult = compileTypeScript(tsStarterSource);
   return {
-    authoringMode: "json",
-
-    machineJsonText: machineToText(csvMachine),
-    jsonErrors: [],
-
     tsSourceText: tsStarterSource,
     tsErrors: tsResult.ok ? [] : tsResult.errors,
     tsSourceMap: tsResult.ok ? tsResult.sourceMap : null,
 
-    machine: csvMachine,
+    machine: tsResult.ok ? tsResult.machine : null,
 
-    inputString: "a,bc",
+    inputString: "hello",
     simulation: null,
     currentStepIndex: -1,
     isPlaying: false,
@@ -94,35 +48,6 @@ function initialState(): AppState {
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case "SET_MODE":
-      return { ...state, authoringMode: action.mode };
-
-    case "SET_JSON_TEXT":
-      return { ...state, machineJsonText: action.text };
-
-    case "APPLY_JSON": {
-      const { machine, errors } = parseMachineJson(state.machineJsonText);
-      return {
-        ...state,
-        machine: machine ?? state.machine,
-        jsonErrors: errors,
-        simulation: null,
-        currentStepIndex: -1,
-        isPlaying: false,
-      };
-    }
-
-    case "LOAD_MACHINE":
-      return {
-        ...state,
-        machine: action.machine,
-        machineJsonText: machineToText(action.machine),
-        jsonErrors: [],
-        simulation: null,
-        currentStepIndex: -1,
-        isPlaying: false,
-      };
-
     case "SET_TS_TEXT":
       return { ...state, tsSourceText: action.text };
 
@@ -162,7 +87,10 @@ function reducer(state: AppState, action: Action): AppState {
     case "RUN": {
       if (!state.machine) return state;
       const simulation = simulate(state.machine, state.inputString);
-      return { ...state, simulation, currentStepIndex: -1, isPlaying: false };
+      // If the run ended in an error state, land on that step so the source line and
+      // offending character are immediately visible instead of requiring a manual step.
+      const currentStepIndex = simulation.erroredStep ? simulation.erroredStep.index : -1;
+      return { ...state, simulation, currentStepIndex, isPlaying: false };
     }
 
     case "GOTO_STEP": {

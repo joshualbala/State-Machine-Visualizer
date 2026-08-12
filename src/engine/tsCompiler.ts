@@ -73,6 +73,9 @@ export function compileTypeScript(source: string): CompileResult {
   const labelsDecl = findVarDecl(body, "labels");
   const labels = labelsDecl ? parseLabelsObject(labelsDecl, stateIdSet, errors) : {};
 
+  const errorStatesDecl = findVarDecl(body, "errorStates");
+  const errorStateIds = errorStatesDecl ? parseErrorStates(errorStatesDecl, stateIdSet, errors) : new Set<string>();
+
   const varsDecl = findVarDecl(body, "vars");
   const variables = varsDecl ? parseVarsObject(varsDecl, errors) : {};
   if (!varsDecl) {
@@ -92,7 +95,7 @@ export function compileTypeScript(source: string): CompileResult {
     return { ok: false, errors };
   }
 
-  const states: StateDef[] = stateIds.map((id) => ({ id, label: labels[id] ?? id }));
+  const states: StateDef[] = stateIds.map((id) => ({ id, label: labels[id] ?? id, isError: errorStateIds.has(id) || undefined }));
   const transitions: TransitionDef[] = [];
   const sourceMap: TsSourceMap = { states: {}, transitions: {} };
   const seenCaseStates = new Set<string>();
@@ -198,6 +201,27 @@ function parseLabelsObject(decl: VariableDeclaration, stateIds: Set<string>, err
     labels[key] = prop.value.value;
   }
   return labels;
+}
+
+function parseErrorStates(decl: VariableDeclaration, stateIds: Set<string>, errors: CompileError[]): Set<string> {
+  const init = declaratorInit(decl, "errorStates");
+  const result = new Set<string>();
+  if (!init || init.type !== "ArrayExpression") {
+    errors.push({ message: "`errorStates` must be an array literal, e.g. `[\"error\"]`.", line: line(decl) });
+    return result;
+  }
+  for (const el of init.elements) {
+    if (!el || el.type !== "StringLiteral") {
+      errors.push({ message: "`errorStates` entries must be string literals.", line: line(decl) });
+      continue;
+    }
+    if (!stateIds.has(el.value)) {
+      errors.push({ message: `errorStates entry "${el.value}" does not match a declared state.`, line: line(decl) });
+      continue;
+    }
+    result.add(el.value);
+  }
+  return result;
 }
 
 function parseVarsObject(decl: VariableDeclaration, errors: CompileError[]): Record<string, JsonValue> {

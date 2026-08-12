@@ -59,7 +59,7 @@ export function TsEditor() {
       </div>
 
       {tsErrors.length > 0 && (
-        <ul className="ts-editor__errors">
+        <ul className="ts-editor__errors" role="alert">
           {tsErrors.map((err, i) => (
             <li key={i}>
               {err.line ? `Line ${err.line}: ` : ""}

@@ -89,3 +89,7 @@
   gap: 16px;
   overflow-y: auto;
 }
+
+.app__panel--right-error {
+  box-shadow: inset 0 0 0 2px var(--danger-text);
+}

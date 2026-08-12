@@ -55,6 +55,12 @@
   font-weight: 700;
 }
 
+.input-runner__char--error {
+  background: var(--danger-text);
+  color: var(--panel);
+  font-weight: 700;
+}
+
 .input-runner__buttons {
   display: flex;
   gap: 8px;
@@ -78,11 +84,17 @@
   text-align: right;
 }
 
-.input-runner__warning {
+.input-runner__warning,
+.input-runner__error {
   margin: 4px 0 0;
   font-size: 12.5px;
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--danger-bg);
   color: var(--danger-text);
+}
+
+.input-runner__error {
+  border: 1px solid var(--danger-text);
+  font-weight: 600;
 }

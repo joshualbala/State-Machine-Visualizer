@@ -6,7 +6,7 @@ const PLAY_INTERVAL_MS = 700;
 
 export function InputRunner() {
   const { state, dispatch } = useAppContext();
-  const { inputString, simulation, currentStepIndex, isPlaying } = state;
+  const { machine, inputString, simulation, currentStepIndex, isPlaying } = state;
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -19,29 +19,40 @@ export function InputRunner() {
   const atEnd = !simulation || currentStepIndex >= totalSteps - 1;
   const currentStep = currentStepIndex >= 0 ? simulation?.steps[currentStepIndex] : undefined;
   const cursorPos = currentStep ? currentStep.position : 0;
+  const erroredStep = simulation?.erroredStep;
+  const isViewingError = Boolean(erroredStep && currentStep && currentStep.index === erroredStep.index);
 
   return (
     <div className="input-runner">
-      <h2>Input</h2>
+      <h2 id="input-runner-heading">Input</h2>
       <textarea
         className="input-runner__input"
         rows={2}
         value={inputString}
         onChange={(e) => dispatch({ type: "SET_INPUT", value: e.target.value })}
         placeholder="Type the string to run through the machine…"
+        aria-labelledby="input-runner-heading"
       />
 
       <div className="input-runner__preview" aria-label="input with read cursor">
         {inputString.length === 0 ? (
           <span className="input-runner__empty">(empty string)</span>
         ) : (
-          inputString.split("").map((ch, i) => (
-            <span key={i} className={`input-runner__char${simulation && i === cursorPos ? " input-runner__char--cursor" : ""}`}>
-              {ch === "\n" ? "⏎" : ch}
-            </span>
-          ))
+          inputString.split("").map((ch, i) => {
+            const isCursor = simulation && i === cursorPos;
+            const className = isCursor
+              ? `input-runner__char${isViewingError ? " input-runner__char--error" : " input-runner__char--cursor"}`
+              : "input-runner__char";
+            return (
+              <span key={i} className={className}>
+                {ch === "\n" ? "⏎" : ch}
+              </span>
+            );
+          })
         )}
-        {simulation && cursorPos >= inputString.length && <span className="input-runner__char input-runner__char--cursor">∎</span>}
+        {simulation && cursorPos >= inputString.length && (
+          <span className={`input-runner__char${isViewingError ? " input-runner__char--error" : " input-runner__char--cursor"}`}>∎</span>
+        )}
       </div>
 
       <div className="input-runner__buttons">
@@ -55,19 +66,19 @@ export function InputRunner() {
 
       {simulation && (
         <div className="input-runner__playback">
-          <button type="button" onClick={() => dispatch({ type: "STEP_BACKWARD" })} disabled={atStart} title="Previous step">
+          <button type="button" onClick={() => dispatch({ type: "STEP_BACKWARD" })} disabled={atStart} title="Previous step" aria-label="Previous step">
             ⏮
           </button>
           {isPlaying ? (
-            <button type="button" onClick={() => dispatch({ type: "PAUSE" })} title="Pause">
+            <button type="button" onClick={() => dispatch({ type: "PAUSE" })} title="Pause" aria-label="Pause">
               ⏸
             </button>
           ) : (
-            <button type="button" onClick={() => dispatch({ type: "PLAY" })} disabled={atEnd} title="Play">
+            <button type="button" onClick={() => dispatch({ type: "PLAY" })} disabled={atEnd} title="Play" aria-label="Play">
               ▶
             </button>
           )}
-          <button type="button" onClick={() => dispatch({ type: "STEP_FORWARD" })} disabled={atEnd} title="Next step">
+          <button type="button" onClick={() => dispatch({ type: "STEP_FORWARD" })} disabled={atEnd} title="Next step" aria-label="Next step">
             ⏭
           </button>
           <input
@@ -77,6 +88,8 @@ export function InputRunner() {
             max={totalSteps - 1}
             value={currentStepIndex}
             onChange={(e) => dispatch({ type: "GOTO_STEP", index: Number(e.target.value) })}
+            aria-label="Playback position"
+            aria-valuetext={currentStepIndex === -1 ? "start, before any steps" : `step ${currentStepIndex + 1} of ${totalSteps}`}
           />
           <span className="input-runner__step-count">
             {currentStepIndex + 1} / {totalSteps}
@@ -85,9 +98,17 @@ export function InputRunner() {
       )}
 
       {simulation && simulation.stuck && (
-        <p className="input-runner__warning">
+        <p className="input-runner__warning" role="alert">
           The machine got stuck: no transition matched the character at position {simulation.steps.at(-1)?.position} in state "
           {simulation.steps.at(-1)?.fromState}".
+        </p>
+      )}
+
+      {erroredStep && (
+        <p className="input-runner__error" role="alert">
+          Error: entered state "{machine?.states.find((s) => s.id === erroredStep.toState)?.label ?? erroredStep.toState}" after reading{" "}
+          {erroredStep.char === null ? "end of input" : `"${erroredStep.char === "\n" ? "⏎" : erroredStep.char}"`} at position {erroredStep.position}.
+          The run stopped there.
         </p>
       )}
     </div>

@@ -13,6 +13,8 @@ export interface SimStep {
   variablesAfter: Record<string, JsonValue>;
   /** True when no transition matched the event: the machine could not continue. */
   stuck: boolean;
+  /** True when this step transitioned into a state flagged `isError`. */
+  errored: boolean;
 }
 
 export interface SimulationResult {
@@ -21,6 +23,8 @@ export interface SimulationResult {
   finalVariables: Record<string, JsonValue>;
   /** True if the machine ran out of applicable transitions before consuming the whole input. */
   stuck: boolean;
+  /** The step that entered an error state, if the run ended that way. The run stops there immediately. */
+  erroredStep: SimStep | null;
 }
 
 function findTransition(
@@ -60,10 +64,12 @@ function applyActions(
 
 /** Runs a machine over an input string, producing a full step-by-step trace. */
 export function simulate(machine: StateMachineDef, input: string): SimulationResult {
+  const errorStateIds = new Set(machine.states.filter((s) => s.isError).map((s) => s.id));
   const steps: SimStep[] = [];
   let currentState = machine.startState;
   let variables = structuredClone(machine.variables);
   let stuck = false;
+  let erroredStep: SimStep | null = null;
 
   for (let position = 0; position <= input.length; position++) {
     const isEndOfInput = position === input.length;
@@ -84,6 +90,7 @@ export function simulate(machine: StateMachineDef, input: string): SimulationRes
           variablesBefore: variables,
           variablesAfter: variables,
           stuck: true,
+          errored: false,
         });
       }
       break;
@@ -91,8 +98,9 @@ export function simulate(machine: StateMachineDef, input: string): SimulationRes
 
     const variablesBefore = variables;
     const variablesAfter = applyActions(transition.actions, char, variables);
+    const entersError = errorStateIds.has(transition.to);
 
-    steps.push({
+    const step: SimStep = {
       index: steps.length,
       position,
       char,
@@ -102,13 +110,21 @@ export function simulate(machine: StateMachineDef, input: string): SimulationRes
       variablesBefore,
       variablesAfter,
       stuck: false,
-    });
+      errored: entersError,
+    };
+    steps.push(step);
 
     variables = variablesAfter;
     currentState = transition.to;
 
+    if (entersError) {
+      // Reaching an error state ends the run immediately: don't consume any more input.
+      erroredStep = step;
+      break;
+    }
+
     if (isEndOfInput) break;
   }
 
-  return { steps, finalState: currentState, finalVariables: variables, stuck };
+  return { steps, finalState: currentState, finalVariables: variables, stuck, erroredStep };
 }
