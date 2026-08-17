@@ -9,6 +9,19 @@ running.
 Because nothing is executed, there is no `console.log`, no imports, no arbitrary logic — only the
 constructs listed below are understood.
 
+The app also runs your source through the real TypeScript compiler's syntax and type checker
+(`src/engine/tsTypeCheck.ts`) — independent of the structural checks above, this catches things
+like a wrong-typed `startState` or a `return` of a state name that doesn't exist, using
+TypeScript's own type checker rather than our grammar walk. Nothing is executed there either; it's
+the same "is this valid, type-safe TypeScript" check your editor's red squiggles would give you.
+Both sets of errors — structural and TypeScript's own — show up under the editor, in separate
+panels.
+
+The **Example 1 / 2 / 3** tabs are a built-in walkthrough: three CSV parsers of increasing
+sophistication (naive comma-splitting → quote-aware but no escaping → quote-aware with escaping),
+each demonstrating the previous one's specific gap. Each tab keeps its own source, errors, and
+playback state independently.
+
 ## Required pieces
 
 A valid machine needs all four of these, in any order:
@@ -29,15 +42,21 @@ An object literal giving each variable its initial value. Values may only be lit
 numbers, booleans, `null`, arrays of literals, or objects of literals (i.e. anything valid JSON).
 
 ```ts
-const vars = {
+const vars: { field: string; record: string[] } = {
   field: "",
   record: [],
 };
 ```
 
 Don't add `as` type-cast expressions to these values (e.g. `[] as string[]`) — the compiler reads
-literals structurally and doesn't unwrap type assertions, so a cast value fails to parse. Since
-nothing is type-checked anyway, casts have no effect here.
+literals structurally and doesn't unwrap type assertions, so a cast value fails to parse.
+
+If a variable starts out as an empty array, annotate the whole `vars` declarator's type as shown
+above. Without it, TypeScript's `strict` mode infers an empty array literal as `never[]`, and the
+real type checker (see below) will flag every later `vars.x.push(...)` as an error — not because
+anything is wrong, just because there's no type information to work from. The annotation on the
+declarator gives it that information; it doesn't change what the structural compiler reads (which
+only ever looks at the initializer values, never the type annotation).
 
 ### 3. `const startState: State = "a";`
 
@@ -254,7 +273,7 @@ const labels: Record<State, string> = {
 
 const startState: State = "startOfField";
 
-const vars = {
+const vars: { field: string; record: string[]; records: string[][] } = {
   field: "",
   record: [],
   records: [],

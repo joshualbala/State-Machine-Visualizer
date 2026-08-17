@@ -3,8 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
-import { useAppContext } from "../state/AppContext";
-import { tsStarterSource } from "../examples/tsStarter";
+import { EXAMPLES, useAppContext, type TabIndex } from "../state/AppContext";
 import type { LineRange } from "../engine/tsCompiler";
 import "./TsEditor.css";
 
@@ -23,8 +22,9 @@ function highlightRangeExtension(range: LineRange | null): Extension {
 }
 
 export function TsEditor() {
-  const { state, dispatch } = useAppContext();
-  const { tsSourceText, tsErrors, tsSourceMap, simulation, currentStepIndex } = state;
+  const { state, active, dispatch } = useAppContext();
+  const { tsSourceText, tsErrors, typeErrors, tsSourceMap, simulation, currentStepIndex } = active;
+  const currentExample = EXAMPLES[state.activeTab];
 
   const currentStep = currentStepIndex >= 0 ? simulation?.steps[currentStepIndex] : undefined;
   const highlightRange = useMemo<LineRange | null>(() => {
@@ -36,11 +36,29 @@ export function TsEditor() {
 
   return (
     <div className="ts-editor">
+      <div className="ts-editor__tabs" role="tablist" aria-label="Example machine">
+        {EXAMPLES.map((ex, i) => (
+          <button
+            key={ex.tabName}
+            type="button"
+            role="tab"
+            aria-selected={state.activeTab === i}
+            className={`ts-editor__tab${state.activeTab === i ? " ts-editor__tab--active" : ""}`}
+            onClick={() => dispatch({ type: "SET_ACTIVE_TAB", tab: i as TabIndex })}
+          >
+            {ex.tabName}
+          </button>
+        ))}
+      </div>
+
       <div className="ts-editor__toolbar">
-        <h2>Machine definition (TypeScript)</h2>
+        <div>
+          <h2>{currentExample.title}</h2>
+          <p className="ts-editor__description">{currentExample.description}</p>
+        </div>
         <div className="ts-editor__buttons">
-          <button type="button" onClick={() => dispatch({ type: "LOAD_TS_EXAMPLE", source: tsStarterSource })}>
-            Load starter example
+          <button type="button" onClick={() => dispatch({ type: "RESET_TO_STARTER" })}>
+            Reset to starter
           </button>
           <button type="button" className="primary" onClick={() => dispatch({ type: "APPLY_TS" })}>
             Apply
@@ -59,14 +77,31 @@ export function TsEditor() {
       </div>
 
       {tsErrors.length > 0 && (
-        <ul className="ts-editor__errors" role="alert">
-          {tsErrors.map((err, i) => (
-            <li key={i}>
-              {err.line ? `Line ${err.line}: ` : ""}
-              {err.message}
-            </li>
-          ))}
-        </ul>
+        <div className="ts-editor__errors" role="alert">
+          <h3>Machine definition errors</h3>
+          <ul>
+            {tsErrors.map((err, i) => (
+              <li key={i}>
+                {err.line ? `Line ${err.line}: ` : ""}
+                {err.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {typeErrors.length > 0 && (
+        <div className="ts-editor__errors ts-editor__errors--type" role="alert">
+          <h3>TypeScript errors</h3>
+          <ul>
+            {typeErrors.map((err, i) => (
+              <li key={i}>
+                {err.line ? `Line ${err.line}: ` : ""}
+                {err.message}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

@@ -23,10 +23,10 @@ function readStoredWidth(): number {
 }
 
 function AppShell() {
-  const { state } = useAppContext();
+  const { active } = useAppContext();
   const [leftWidth, setLeftWidth] = useState(readStoredWidth);
   const draggingRef = useRef(false);
-  const hasError = Boolean(state.simulation?.erroredStep);
+  const hasError = Boolean(active.simulation?.erroredStep);
 
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     draggingRef.current = true;

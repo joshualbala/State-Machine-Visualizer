@@ -5,8 +5,8 @@ import "./InputRunner.css";
 const PLAY_INTERVAL_MS = 700;
 
 export function InputRunner() {
-  const { state, dispatch } = useAppContext();
-  const { machine, inputString, simulation, currentStepIndex, isPlaying } = state;
+  const { active, dispatch } = useAppContext();
+  const { machine, inputString, simulation, currentStepIndex, isPlaying } = active;
 
   useEffect(() => {
     if (!isPlaying) return;

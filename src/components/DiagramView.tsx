@@ -12,8 +12,8 @@ const nodeTypes: NodeTypes = { state: StateNode };
 const edgeTypes: EdgeTypes = { transition: TransitionEdge };
 
 function DiagramInner() {
-  const { state } = useAppContext();
-  const { machine, simulation, currentStepIndex } = state;
+  const { active } = useAppContext();
+  const { machine, simulation, currentStepIndex } = active;
 
   const currentStep = currentStepIndex >= 0 ? simulation?.steps[currentStepIndex] : undefined;
   const activeState = currentStep ? currentStep.toState ?? currentStep.fromState : machine?.startState;

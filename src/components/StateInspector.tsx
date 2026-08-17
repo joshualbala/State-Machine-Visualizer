@@ -47,8 +47,8 @@ function historyLabel(step: SimStep): string {
 }
 
 export function StateInspector() {
-  const { state, dispatch } = useAppContext();
-  const { machine, simulation, currentStepIndex } = state;
+  const { active, dispatch } = useAppContext();
+  const { machine, simulation, currentStepIndex } = active;
 
   if (!machine) return <div className="state-inspector">No machine loaded.</div>;
 

@@ -2,11 +2,18 @@ import { createContext, useContext, useMemo, useReducer, type ReactNode } from "
 import { simulate, type SimulationResult } from "../engine/simulate";
 import type { StateMachineDef } from "../types/stateMachine";
 import { compileTypeScript, type CompileError, type TsSourceMap } from "../engine/tsCompiler";
-import { tsStarterSource } from "../examples/tsStarter";
+import { typeCheckTypeScript, type TypeCheckError } from "../engine/tsTypeCheck";
+import { example1 } from "../examples/example1";
+import { example2 } from "../examples/example2";
+import { example3 } from "../examples/example3";
 
-interface AppState {
+export const EXAMPLES = [example1, example2, example3] as const;
+export type TabIndex = 0 | 1 | 2;
+
+interface ExampleState {
   tsSourceText: string;
   tsErrors: CompileError[];
+  typeErrors: TypeCheckError[];
   tsSourceMap: TsSourceMap | null;
 
   machine: StateMachineDef | null;
@@ -17,10 +24,16 @@ interface AppState {
   isPlaying: boolean;
 }
 
+interface AppState {
+  activeTab: TabIndex;
+  examples: [ExampleState, ExampleState, ExampleState];
+}
+
 type Action =
+  | { type: "SET_ACTIVE_TAB"; tab: TabIndex }
   | { type: "SET_TS_TEXT"; text: string }
   | { type: "APPLY_TS" }
-  | { type: "LOAD_TS_EXAMPLE"; source: string }
+  | { type: "RESET_TO_STARTER" }
   | { type: "SET_INPUT"; value: string }
   | { type: "RUN" }
   | { type: "GOTO_STEP"; index: number }
@@ -30,97 +43,113 @@ type Action =
   | { type: "PLAY" }
   | { type: "PAUSE" };
 
-function initialState(): AppState {
-  const tsResult = compileTypeScript(tsStarterSource);
+function compileAndCheck(source: string): { tsErrors: CompileError[]; typeErrors: TypeCheckError[]; machine: StateMachineDef | null; tsSourceMap: TsSourceMap | null } {
+  const typeErrors = typeCheckTypeScript(source);
+  const result = compileTypeScript(source);
+  if (!result.ok) {
+    return { tsErrors: result.errors, typeErrors, machine: null, tsSourceMap: null };
+  }
+  return { tsErrors: [], typeErrors, machine: result.machine, tsSourceMap: result.sourceMap };
+}
+
+function createExampleState(source: string): ExampleState {
+  const { tsErrors, typeErrors, machine, tsSourceMap } = compileAndCheck(source);
   return {
-    tsSourceText: tsStarterSource,
-    tsErrors: tsResult.ok ? [] : tsResult.errors,
-    tsSourceMap: tsResult.ok ? tsResult.sourceMap : null,
-
-    machine: tsResult.ok ? tsResult.machine : null,
-
-    inputString: "hello",
+    tsSourceText: source,
+    tsErrors,
+    typeErrors,
+    tsSourceMap,
+    machine,
+    inputString: '"Smith, John","said ""hi"""',
     simulation: null,
     currentStepIndex: -1,
     isPlaying: false,
   };
 }
 
+function initialState(): AppState {
+  return {
+    activeTab: 0,
+    examples: [createExampleState(EXAMPLES[0].source), createExampleState(EXAMPLES[1].source), createExampleState(EXAMPLES[2].source)],
+  };
+}
+
+function updateActive(state: AppState, updater: (ex: ExampleState) => ExampleState): AppState {
+  const examples = [...state.examples] as AppState["examples"];
+  examples[state.activeTab] = updater(examples[state.activeTab]);
+  return { ...state, examples };
+}
+
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case "SET_ACTIVE_TAB":
+      return { ...state, activeTab: action.tab };
+
     case "SET_TS_TEXT":
-      return { ...state, tsSourceText: action.text };
+      return updateActive(state, (ex) => ({ ...ex, tsSourceText: action.text }));
 
-    case "APPLY_TS": {
-      const result = compileTypeScript(state.tsSourceText);
-      if (!result.ok) {
-        return { ...state, tsErrors: result.errors, simulation: null, currentStepIndex: -1, isPlaying: false };
-      }
-      return {
-        ...state,
-        machine: result.machine,
-        tsErrors: [],
-        tsSourceMap: result.sourceMap,
-        simulation: null,
-        currentStepIndex: -1,
-        isPlaying: false,
-      };
-    }
+    case "APPLY_TS":
+      return updateActive(state, (ex) => {
+        const { tsErrors, typeErrors, machine, tsSourceMap } = compileAndCheck(ex.tsSourceText);
+        return {
+          ...ex,
+          tsErrors,
+          typeErrors,
+          machine: machine ?? ex.machine,
+          tsSourceMap: tsSourceMap ?? ex.tsSourceMap,
+          simulation: null,
+          currentStepIndex: -1,
+          isPlaying: false,
+        };
+      });
 
-    case "LOAD_TS_EXAMPLE": {
-      const result = compileTypeScript(action.source);
-      return {
-        ...state,
-        tsSourceText: action.source,
-        machine: result.ok ? result.machine : state.machine,
-        tsErrors: result.ok ? [] : result.errors,
-        tsSourceMap: result.ok ? result.sourceMap : null,
-        simulation: null,
-        currentStepIndex: -1,
-        isPlaying: false,
-      };
-    }
+    case "RESET_TO_STARTER":
+      return updateActive(state, () => createExampleState(EXAMPLES[state.activeTab].source));
 
     case "SET_INPUT":
-      return { ...state, inputString: action.value, simulation: null, currentStepIndex: -1, isPlaying: false };
+      return updateActive(state, (ex) => ({ ...ex, inputString: action.value, simulation: null, currentStepIndex: -1, isPlaying: false }));
 
-    case "RUN": {
-      if (!state.machine) return state;
-      const simulation = simulate(state.machine, state.inputString);
-      // If the run ended in an error state, land on that step so the source line and
-      // offending character are immediately visible instead of requiring a manual step.
-      const currentStepIndex = simulation.erroredStep ? simulation.erroredStep.index : -1;
-      return { ...state, simulation, currentStepIndex, isPlaying: false };
-    }
+    case "RUN":
+      return updateActive(state, (ex) => {
+        if (!ex.machine) return ex;
+        const simulation = simulate(ex.machine, ex.inputString);
+        const currentStepIndex = simulation.erroredStep ? simulation.erroredStep.index : -1;
+        return { ...ex, simulation, currentStepIndex, isPlaying: false };
+      });
 
-    case "GOTO_STEP": {
-      if (!state.simulation) return state;
-      const max = state.simulation.steps.length - 1;
-      const index = Math.max(-1, Math.min(action.index, max));
-      return { ...state, currentStepIndex: index };
-    }
+    case "GOTO_STEP":
+      return updateActive(state, (ex) => {
+        if (!ex.simulation) return ex;
+        const max = ex.simulation.steps.length - 1;
+        const index = Math.max(-1, Math.min(action.index, max));
+        return { ...ex, currentStepIndex: index };
+      });
 
-    case "STEP_FORWARD": {
-      if (!state.simulation) return state;
-      const max = state.simulation.steps.length - 1;
-      if (state.currentStepIndex >= max) return { ...state, isPlaying: false };
-      return { ...state, currentStepIndex: state.currentStepIndex + 1 };
-    }
+    case "STEP_FORWARD":
+      return updateActive(state, (ex) => {
+        if (!ex.simulation) return ex;
+        const max = ex.simulation.steps.length - 1;
+        if (ex.currentStepIndex >= max) return { ...ex, isPlaying: false };
+        return { ...ex, currentStepIndex: ex.currentStepIndex + 1 };
+      });
 
-    case "STEP_BACKWARD": {
-      if (!state.simulation) return state;
-      return { ...state, currentStepIndex: Math.max(-1, state.currentStepIndex - 1), isPlaying: false };
-    }
+    case "STEP_BACKWARD":
+      return updateActive(state, (ex) => {
+        if (!ex.simulation) return ex;
+        return { ...ex, currentStepIndex: Math.max(-1, ex.currentStepIndex - 1), isPlaying: false };
+      });
 
     case "RESET_PLAYBACK":
-      return { ...state, currentStepIndex: -1, isPlaying: false };
+      return updateActive(state, (ex) => ({ ...ex, currentStepIndex: -1, isPlaying: false }));
 
     case "PLAY":
-      if (!state.simulation || state.currentStepIndex >= state.simulation.steps.length - 1) return state;
-      return { ...state, isPlaying: true };
+      return updateActive(state, (ex) => {
+        if (!ex.simulation || ex.currentStepIndex >= ex.simulation.steps.length - 1) return ex;
+        return { ...ex, isPlaying: true };
+      });
 
     case "PAUSE":
-      return { ...state, isPlaying: false };
+      return updateActive(state, (ex) => ({ ...ex, isPlaying: false }));
 
     default:
       return state;
@@ -129,6 +158,7 @@ function reducer(state: AppState, action: Action): AppState {
 
 interface AppContextValue {
   state: AppState;
+  active: ExampleState;
   dispatch: React.Dispatch<Action>;
 }
 
@@ -136,7 +166,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
-  const value = useMemo(() => ({ state, dispatch }), [state]);
+  const value = useMemo(() => ({ state, active: state.examples[state.activeTab], dispatch }), [state]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
