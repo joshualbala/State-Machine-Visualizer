@@ -60,7 +60,21 @@ function createExampleState(source: string): ExampleState {
     typeErrors,
     tsSourceMap,
     machine,
-    inputString: '"Smith, John","said ""hi"""',
+    inputString: "",
+    simulation: null,
+    currentStepIndex: -1,
+    isPlaying: false,
+  };
+}
+
+function emptyExampleState(): ExampleState {
+  return {
+    tsSourceText: "",
+    tsErrors: [],
+    typeErrors: [],
+    tsSourceMap: null,
+    machine: null,
+    inputString: "",
     simulation: null,
     currentStepIndex: -1,
     isPlaying: false,
@@ -70,7 +84,7 @@ function createExampleState(source: string): ExampleState {
 function initialState(): AppState {
   return {
     activeTab: 0,
-    examples: [createExampleState(EXAMPLES[0].source), createExampleState(EXAMPLES[1].source), createExampleState(EXAMPLES[2].source)],
+    examples: [emptyExampleState(), emptyExampleState(), emptyExampleState()],
   };
 }
 
@@ -82,8 +96,15 @@ function updateActive(state: AppState, updater: (ex: ExampleState) => ExampleSta
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case "SET_ACTIVE_TAB":
-      return { ...state, activeTab: action.tab };
+    case "SET_ACTIVE_TAB": {
+      const examples = [...state.examples] as AppState["examples"];
+      // Load a tab's starter the first time it's opened, without clobbering anything the user
+      // has already typed into it (switching away and back preserves edits).
+      if (examples[action.tab].tsSourceText === "") {
+        examples[action.tab] = createExampleState(EXAMPLES[action.tab].source);
+      }
+      return { ...state, activeTab: action.tab, examples };
+    }
 
     case "SET_TS_TEXT":
       return updateActive(state, (ex) => ({ ...ex, tsSourceText: action.text }));

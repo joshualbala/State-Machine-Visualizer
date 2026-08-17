@@ -20,7 +20,8 @@ panels.
 The **Example 1 / 2 / 3** tabs are a built-in walkthrough: three CSV parsers of increasing
 sophistication (naive comma-splitting → quote-aware but no escaping → quote-aware with escaping),
 each demonstrating the previous one's specific gap. Each tab keeps its own source, errors, and
-playback state independently.
+playback state independently, and starts empty — click **Reset to starter** on a tab to load its
+example.
 
 ## Required pieces
 

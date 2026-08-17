@@ -24,7 +24,6 @@ function highlightRangeExtension(range: LineRange | null): Extension {
 export function TsEditor() {
   const { state, active, dispatch } = useAppContext();
   const { tsSourceText, tsErrors, typeErrors, tsSourceMap, simulation, currentStepIndex } = active;
-  const currentExample = EXAMPLES[state.activeTab];
 
   const currentStep = currentStepIndex >= 0 ? simulation?.steps[currentStepIndex] : undefined;
   const highlightRange = useMemo<LineRange | null>(() => {
@@ -52,10 +51,6 @@ export function TsEditor() {
       </div>
 
       <div className="ts-editor__toolbar">
-        <div>
-          <h2>{currentExample.title}</h2>
-          <p className="ts-editor__description">{currentExample.description}</p>
-        </div>
         <div className="ts-editor__buttons">
           <button type="button" onClick={() => dispatch({ type: "RESET_TO_STARTER" })}>
             Reset to starter

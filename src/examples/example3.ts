@@ -1,35 +1,8 @@
 export const example3 = {
   tabName: "Example 3",
-  title: "Escape-Aware",
-  description:
-    'A third state resolves whether a quote seen while quoted is a closing quote or the first half of an ' +
-    'escaped "" pair, by looking at what comes next. Gets doubled-quote escaping right for the common case. ' +
-    "The textbook remaining gap is streaming input split across chunk boundaries — this tool always runs " +
-    "over one complete in-memory string, so that specific failure mode doesn't apply here; try it against " +
-    'the same input as Example 2 and compare.',
-  source: `// Example 3: Quote-Aware With Escape Handling
-// Three states. The new "quoteSeenInQuoted" state is reached after a quote is
-// seen while inside a quoted field, and resolves what it means by looking at
-// the very next character: another quote means it was an escaped, literal "
-// (append it and stay quoted); anything else means that quote really was the
-// closing quote.
-// Good at: quoted fields with embedded commas/newlines AND escaped quotes,
-// single-pass, in memory — this is the first version that gets "" right.
-// The textbook remaining gap for a version like this is a *streaming* parser
-// having to peek at the next character right when a chunk boundary falls
-// between the two quotes of an escaped pair. This tool always simulates over
-// one complete in-memory string (never chunks), so that specific bug doesn't
-// have anywhere to manifest here — every input below is handled correctly.
+  source: `type State = "s1" | "s2" | "s3";
 
-type State = "unquoted" | "quoted" | "quoteSeenInQuoted";
-
-const labels: Record<State, string> = {
-  unquoted: "Unquoted",
-  quoted: "Quoted",
-  quoteSeenInQuoted: "Quote Seen in Quoted Field",
-};
-
-const startState: State = "unquoted";
+const startState: State = "s1";
 
 const vars: { field: string; row: string[]; rows: string[][] } = {
   field: "",
@@ -39,74 +12,72 @@ const vars: { field: string; row: string[]; rows: string[][] } = {
 
 function step(state: State, char: string | null): State {
   switch (state) {
-    case "unquoted":
+    case "s1":
       if (char === '"') {
-        return "quoted";
+        return "s2";
       }
       if (char === ",") {
         vars.row.push(vars.field);
         vars.field = "";
-        return "unquoted";
+        return "s1";
       }
       if (char === "\\n") {
         vars.row.push(vars.field);
         vars.field = "";
         vars.rows.push(vars.row);
         vars.row = [];
-        return "unquoted";
+        return "s1";
       }
       if (char === null) {
         vars.row.push(vars.field);
         vars.field = "";
         vars.rows.push(vars.row);
         vars.row = [];
-        return "unquoted";
+        return "s1";
       }
       vars.field += char;
-      return "unquoted";
+      return "s1";
 
-    case "quoted":
+    case "s2":
       if (char === '"') {
-        return "quoteSeenInQuoted";
+        return "s3";
       }
       if (char === null) {
         vars.row.push(vars.field);
         vars.field = "";
         vars.rows.push(vars.row);
         vars.row = [];
-        return "unquoted";
+        return "s1";
       }
       vars.field += char;
-      return "quoted";
+      return "s2";
 
-    case "quoteSeenInQuoted":
+    case "s3":
       if (char === '"') {
-        // Second quote of an escaped "" pair: it's a literal quote character.
         vars.field += char;
-        return "quoted";
+        return "s2";
       }
       if (char === ",") {
-        // Not a second quote, so the first one really did close the field.
         vars.row.push(vars.field);
         vars.field = "";
-        return "unquoted";
+        return "s1";
       }
       if (char === "\\n") {
         vars.row.push(vars.field);
         vars.field = "";
         vars.rows.push(vars.row);
         vars.row = [];
-        return "unquoted";
+        return "s1";
       }
       if (char === null) {
         vars.row.push(vars.field);
         vars.field = "";
         vars.rows.push(vars.row);
         vars.row = [];
-        return "unquoted";
+        return "s1";
       }
       vars.field += char;
-      return "unquoted";
+      return "s1";
   }
 }
 `,
