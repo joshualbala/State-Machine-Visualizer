@@ -1,9 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
-import { EXAMPLES, useAppContext, type TabIndex } from "../state/AppContext";
+import { useAppContext, type Tab } from "../state/AppContext";
 import type { LineRange } from "../engine/tsCompiler";
 import "./TsEditor.css";
 
@@ -21,9 +21,79 @@ function highlightRangeExtension(range: LineRange | null): Extension {
   });
 }
 
+interface TabButtonProps {
+  tab: Tab;
+  isActive: boolean;
+  startInRename: boolean;
+  onSelect: () => void;
+  onRename: (name: string) => void;
+  onRemove: () => void;
+}
+
+function TabButton({ tab, isActive, startInRename, onSelect, onRename, onRemove }: TabButtonProps) {
+  const [renaming, setRenaming] = useState(startInRename);
+  const [draftName, setDraftName] = useState(tab.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renaming) inputRef.current?.select();
+  }, [renaming]);
+
+  function commit() {
+    onRename(draftName);
+    setRenaming(false);
+  }
+
+  function handleRemove(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (tab.state.tsSourceText.trim() !== "" && !window.confirm(`Remove "${tab.name}"? This can't be undone.`)) return;
+    onRemove();
+  }
+
+  return (
+    <div className={`ts-editor__tab-wrapper${tab.isCustom ? " ts-editor__tab-wrapper--custom" : ""}`}>
+      {renaming ? (
+        <input
+          ref={inputRef}
+          className="ts-editor__tab-rename"
+          value={draftName}
+          onChange={(e) => setDraftName(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") {
+              setDraftName(tab.name);
+              setRenaming(false);
+            }
+          }}
+          autoFocus
+        />
+      ) : (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isActive}
+          className={`ts-editor__tab${isActive ? " ts-editor__tab--active" : ""}`}
+          onClick={onSelect}
+          onDoubleClick={() => tab.isCustom && setRenaming(true)}
+          title={tab.isCustom ? "Double-click to rename" : undefined}
+        >
+          {tab.name}
+        </button>
+      )}
+      {tab.isCustom && !renaming && (
+        <button type="button" className="ts-editor__tab-remove" onClick={handleRemove} aria-label={`Remove ${tab.name}`} title="Remove">
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function TsEditor() {
-  const { state, active, dispatch } = useAppContext();
+  const { state, activeTab, active, dispatch } = useAppContext();
   const { tsSourceText, tsErrors, typeErrors, tsSourceMap, simulation, currentStepIndex } = active;
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
 
   const currentStep = currentStepIndex >= 0 ? simulation?.steps[currentStepIndex] : undefined;
   const highlightRange = useMemo<LineRange | null>(() => {
@@ -33,27 +103,36 @@ export function TsEditor() {
 
   const extensions = useMemo(() => [javascript({ typescript: true }), highlightRangeExtension(highlightRange)], [highlightRange]);
 
+  function addTab() {
+    const id = crypto.randomUUID();
+    const customCount = state.tabs.filter((t) => t.isCustom).length;
+    dispatch({ type: "ADD_TAB", id, name: `Custom ${customCount + 1}` });
+    setJustCreatedId(id);
+  }
+
   return (
     <div className="ts-editor">
       <div className="ts-editor__tabs" role="tablist" aria-label="Example machine">
-        {EXAMPLES.map((ex, i) => (
-          <button
-            key={ex.tabName}
-            type="button"
-            role="tab"
-            aria-selected={state.activeTab === i}
-            className={`ts-editor__tab${state.activeTab === i ? " ts-editor__tab--active" : ""}`}
-            onClick={() => dispatch({ type: "SET_ACTIVE_TAB", tab: i as TabIndex })}
-          >
-            {ex.tabName}
-          </button>
+        {state.tabs.map((tab) => (
+          <TabButton
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === state.activeTabId}
+            startInRename={tab.id === justCreatedId}
+            onSelect={() => dispatch({ type: "SET_ACTIVE_TAB", id: tab.id })}
+            onRename={(name) => dispatch({ type: "RENAME_TAB", id: tab.id, name })}
+            onRemove={() => dispatch({ type: "REMOVE_TAB", id: tab.id })}
+          />
         ))}
+        <button type="button" className="ts-editor__tab-add" onClick={addTab} aria-label="Add new example" title="Add new example">
+          +
+        </button>
       </div>
 
       <div className="ts-editor__toolbar">
         <div className="ts-editor__buttons">
           <button type="button" onClick={() => dispatch({ type: "RESET_TO_STARTER" })}>
-            Reset to starter
+            {activeTab.isCustom ? "Clear" : "Reset to starter"}
           </button>
           <button type="button" className="primary" onClick={() => dispatch({ type: "APPLY_TS" })}>
             Apply

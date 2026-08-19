@@ -7,8 +7,7 @@ import { example1 } from "../examples/example1";
 import { example2 } from "../examples/example2";
 import { example3 } from "../examples/example3";
 
-export const EXAMPLES = [example1, example2, example3] as const;
-export type TabIndex = 0 | 1 | 2;
+const BUILTIN_EXAMPLES = [example1, example2, example3] as const;
 
 interface ExampleState {
   tsSourceText: string;
@@ -24,16 +23,28 @@ interface ExampleState {
   isPlaying: boolean;
 }
 
+export interface Tab {
+  id: string;
+  name: string;
+  /** Built-in tabs have a fixed name and a starter to reset to; custom tabs can be renamed/removed. */
+  isCustom: boolean;
+  starterSource: string | null;
+  state: ExampleState;
+}
+
 interface AppState {
-  activeTab: TabIndex;
-  examples: [ExampleState, ExampleState, ExampleState];
+  activeTabId: string;
+  tabs: Tab[];
 }
 
 type Action =
-  | { type: "SET_ACTIVE_TAB"; tab: TabIndex }
+  | { type: "SET_ACTIVE_TAB"; id: string }
   | { type: "SET_TS_TEXT"; text: string }
   | { type: "APPLY_TS" }
   | { type: "RESET_TO_STARTER" }
+  | { type: "ADD_TAB"; id: string; name: string }
+  | { type: "RENAME_TAB"; id: string; name: string }
+  | { type: "REMOVE_TAB"; id: string }
   | { type: "SET_INPUT"; value: string }
   | { type: "RUN" }
   | { type: "GOTO_STEP"; index: number }
@@ -52,7 +63,7 @@ function compileAndCheck(source: string): { tsErrors: CompileError[]; typeErrors
   return { tsErrors: [], typeErrors, machine: result.machine, tsSourceMap: result.sourceMap };
 }
 
-function createExampleState(source: string): ExampleState {
+function loadedExampleState(source: string): ExampleState {
   const { tsErrors, typeErrors, machine, tsSourceMap } = compileAndCheck(source);
   return {
     tsSourceText: source,
@@ -83,34 +94,41 @@ function emptyExampleState(): ExampleState {
 
 function initialState(): AppState {
   return {
-    activeTab: 0,
-    examples: [emptyExampleState(), emptyExampleState(), emptyExampleState()],
+    activeTabId: "builtin-0",
+    tabs: BUILTIN_EXAMPLES.map((ex, i) => ({
+      id: `builtin-${i}`,
+      name: ex.tabName,
+      isCustom: false,
+      starterSource: ex.source,
+      state: emptyExampleState(),
+    })),
   };
 }
 
-function updateActive(state: AppState, updater: (ex: ExampleState) => ExampleState): AppState {
-  const examples = [...state.examples] as AppState["examples"];
-  examples[state.activeTab] = updater(examples[state.activeTab]);
-  return { ...state, examples };
+function updateActiveTab(state: AppState, updater: (ex: ExampleState) => ExampleState): AppState {
+  return {
+    ...state,
+    tabs: state.tabs.map((t) => (t.id === state.activeTabId ? { ...t, state: updater(t.state) } : t)),
+  };
 }
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "SET_ACTIVE_TAB": {
-      const examples = [...state.examples] as AppState["examples"];
-      // Load a tab's starter the first time it's opened, without clobbering anything the user
-      // has already typed into it (switching away and back preserves edits).
-      if (examples[action.tab].tsSourceText === "") {
-        examples[action.tab] = createExampleState(EXAMPLES[action.tab].source);
-      }
-      return { ...state, activeTab: action.tab, examples };
+      // Load a built-in tab's starter the first time it's opened, without clobbering anything
+      // the user has already typed into it (switching away and back preserves edits).
+      const tabs = state.tabs.map((t) => {
+        if (t.id !== action.id || t.state.tsSourceText !== "" || !t.starterSource) return t;
+        return { ...t, state: loadedExampleState(t.starterSource) };
+      });
+      return { ...state, activeTabId: action.id, tabs };
     }
 
     case "SET_TS_TEXT":
-      return updateActive(state, (ex) => ({ ...ex, tsSourceText: action.text }));
+      return updateActiveTab(state, (ex) => ({ ...ex, tsSourceText: action.text }));
 
     case "APPLY_TS":
-      return updateActive(state, (ex) => {
+      return updateActiveTab(state, (ex) => {
         const { tsErrors, typeErrors, machine, tsSourceMap } = compileAndCheck(ex.tsSourceText);
         return {
           ...ex,
@@ -124,14 +142,38 @@ function reducer(state: AppState, action: Action): AppState {
         };
       });
 
-    case "RESET_TO_STARTER":
-      return updateActive(state, () => createExampleState(EXAMPLES[state.activeTab].source));
+    case "RESET_TO_STARTER": {
+      const active = state.tabs.find((t) => t.id === state.activeTabId);
+      if (!active) return state;
+      const nextState = active.starterSource ? loadedExampleState(active.starterSource) : emptyExampleState();
+      return { ...state, tabs: state.tabs.map((t) => (t.id === state.activeTabId ? { ...t, state: nextState } : t)) };
+    }
+
+    case "ADD_TAB": {
+      const newTab: Tab = { id: action.id, name: action.name, isCustom: true, starterSource: null, state: emptyExampleState() };
+      return { ...state, tabs: [...state.tabs, newTab], activeTabId: action.id };
+    }
+
+    case "RENAME_TAB":
+      return {
+        ...state,
+        tabs: state.tabs.map((t) => (t.id === action.id && t.isCustom && action.name.trim() ? { ...t, name: action.name.trim() } : t)),
+      };
+
+    case "REMOVE_TAB": {
+      const target = state.tabs.find((t) => t.id === action.id);
+      if (!target || !target.isCustom) return state;
+      const tabs = state.tabs.filter((t) => t.id !== action.id);
+      const removingActive = state.activeTabId === action.id;
+      const activeTabId = removingActive ? (tabs[tabs.length - 1]?.id ?? state.activeTabId) : state.activeTabId;
+      return { ...state, tabs, activeTabId };
+    }
 
     case "SET_INPUT":
-      return updateActive(state, (ex) => ({ ...ex, inputString: action.value, simulation: null, currentStepIndex: -1, isPlaying: false }));
+      return updateActiveTab(state, (ex) => ({ ...ex, inputString: action.value, simulation: null, currentStepIndex: -1, isPlaying: false }));
 
     case "RUN":
-      return updateActive(state, (ex) => {
+      return updateActiveTab(state, (ex) => {
         if (!ex.machine) return ex;
         const simulation = simulate(ex.machine, ex.inputString);
         const currentStepIndex = simulation.erroredStep ? simulation.erroredStep.index : -1;
@@ -139,7 +181,7 @@ function reducer(state: AppState, action: Action): AppState {
       });
 
     case "GOTO_STEP":
-      return updateActive(state, (ex) => {
+      return updateActiveTab(state, (ex) => {
         if (!ex.simulation) return ex;
         const max = ex.simulation.steps.length - 1;
         const index = Math.max(-1, Math.min(action.index, max));
@@ -147,7 +189,7 @@ function reducer(state: AppState, action: Action): AppState {
       });
 
     case "STEP_FORWARD":
-      return updateActive(state, (ex) => {
+      return updateActiveTab(state, (ex) => {
         if (!ex.simulation) return ex;
         const max = ex.simulation.steps.length - 1;
         if (ex.currentStepIndex >= max) return { ...ex, isPlaying: false };
@@ -155,22 +197,22 @@ function reducer(state: AppState, action: Action): AppState {
       });
 
     case "STEP_BACKWARD":
-      return updateActive(state, (ex) => {
+      return updateActiveTab(state, (ex) => {
         if (!ex.simulation) return ex;
         return { ...ex, currentStepIndex: Math.max(-1, ex.currentStepIndex - 1), isPlaying: false };
       });
 
     case "RESET_PLAYBACK":
-      return updateActive(state, (ex) => ({ ...ex, currentStepIndex: -1, isPlaying: false }));
+      return updateActiveTab(state, (ex) => ({ ...ex, currentStepIndex: -1, isPlaying: false }));
 
     case "PLAY":
-      return updateActive(state, (ex) => {
+      return updateActiveTab(state, (ex) => {
         if (!ex.simulation || ex.currentStepIndex >= ex.simulation.steps.length - 1) return ex;
         return { ...ex, isPlaying: true };
       });
 
     case "PAUSE":
-      return updateActive(state, (ex) => ({ ...ex, isPlaying: false }));
+      return updateActiveTab(state, (ex) => ({ ...ex, isPlaying: false }));
 
     default:
       return state;
@@ -179,6 +221,7 @@ function reducer(state: AppState, action: Action): AppState {
 
 interface AppContextValue {
   state: AppState;
+  activeTab: Tab;
   active: ExampleState;
   dispatch: React.Dispatch<Action>;
 }
@@ -187,7 +230,10 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
-  const value = useMemo(() => ({ state, active: state.examples[state.activeTab], dispatch }), [state]);
+  const value = useMemo(() => {
+    const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? state.tabs[0];
+    return { state, activeTab, active: activeTab.state, dispatch };
+  }, [state]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

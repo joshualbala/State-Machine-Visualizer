@@ -8,32 +8,103 @@
 
 .ts-editor__tabs {
   display: flex;
+  align-items: center;
   gap: 4px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 
+.ts-editor__tab-wrapper {
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+}
+
+.ts-editor__tab-wrapper:has(.ts-editor__tab--active) {
+  border-bottom-color: var(--accent);
+}
+
+.ts-editor__tab-wrapper--custom:has(.ts-editor__tab--active) {
+  border-bottom-style: dashed;
+}
+
 .ts-editor__tab {
   border: none;
-  border-radius: 0;
+  border-radius: 4px 4px 0 0;
   background: transparent;
   padding: 6px 4px;
-  margin-bottom: -1px;
-  margin-right: 12px;
-  border-bottom: 2px solid transparent;
   color: var(--muted);
   font-weight: 600;
   font-size: 12.5px;
 }
 
 .ts-editor__tab:hover:not(:disabled) {
-  border-color: transparent;
   color: var(--text);
 }
 
 .ts-editor__tab--active {
   color: var(--accent);
-  border-bottom-color: var(--accent);
+}
+
+.ts-editor__tab-wrapper--custom .ts-editor__tab {
+  font-style: italic;
+}
+
+.ts-editor__tab-wrapper--custom .ts-editor__tab::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.ts-editor__tab-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 5px;
+  margin-left: 2px;
+  border-radius: 4px;
+}
+
+.ts-editor__tab-remove:hover {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.ts-editor__tab-rename {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--panel-inset);
+  color: var(--text);
+  width: 110px;
+}
+
+.ts-editor__tab-add {
+  border: 1px dashed var(--node-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 9px;
+  margin-bottom: 4px;
+}
+
+.ts-editor__tab-add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .ts-editor__toolbar {
