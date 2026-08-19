@@ -34,7 +34,7 @@ function DiagramInner() {
         id: s.id,
         type: "state",
         position: positions[s.id],
-        data: { label: s.label, isStart: s.id === machine.startState, active: s.id === machine.startState },
+        data: { label: s.label, isStart: s.id === machine.startState, active: s.id === machine.startState, isError: Boolean(s.isError) },
       }))
     );
   }, [machine, setNodes]);

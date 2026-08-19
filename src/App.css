@@ -24,6 +24,13 @@
   font-size: 12.5px;
 }
 
+.app__header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .app__body {
   flex: 1;
   min-height: 0;

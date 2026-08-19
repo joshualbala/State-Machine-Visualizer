@@ -1,8 +1,9 @@
-import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
 import { simulate, type SimulationResult } from "../engine/simulate";
 import type { StateMachineDef } from "../types/stateMachine";
 import { compileTypeScript, type CompileError, type TsSourceMap } from "../engine/tsCompiler";
 import { typeCheckTypeScript, type TypeCheckError } from "../engine/tsTypeCheck";
+import { loadPersistedState, savePersistedState, type PersistedState } from "./persistence";
 import { example1 } from "../examples/example1";
 import { example2 } from "../examples/example2";
 import { example3 } from "../examples/example3";
@@ -92,7 +93,7 @@ function emptyExampleState(): ExampleState {
   };
 }
 
-function initialState(): AppState {
+function defaultInitialState(): AppState {
   return {
     activeTabId: "builtin-0",
     tabs: BUILTIN_EXAMPLES.map((ex, i) => ({
@@ -101,6 +102,60 @@ function initialState(): AppState {
       isCustom: false,
       starterSource: ex.source,
       state: emptyExampleState(),
+    })),
+  };
+}
+
+function builtinIndexForId(id: string): number {
+  return BUILTIN_EXAMPLES.findIndex((_, i) => `builtin-${i}` === id);
+}
+
+/** Rebuilds tabs from a persisted snapshot, recompiling each tab's source rather than trusting
+ *  any persisted compiled output. Built-in tabs always take their name/starter from the current
+ *  shipped examples (not from the snapshot), so an app update never leaves a tab pointing at a
+ *  stale starter — only the user's actual source/input text comes from storage. */
+function reconcileTabs(persisted: PersistedState): Tab[] {
+  const tabs = persisted.tabs.map((pt): Tab => {
+    const builtinIndex = builtinIndexForId(pt.id);
+    const isBuiltin = builtinIndex !== -1;
+    const state = pt.tsSourceText ? loadedExampleState(pt.tsSourceText) : emptyExampleState();
+    return {
+      id: pt.id,
+      name: isBuiltin ? BUILTIN_EXAMPLES[builtinIndex].tabName : pt.name,
+      isCustom: !isBuiltin,
+      starterSource: isBuiltin ? BUILTIN_EXAMPLES[builtinIndex].source : null,
+      state: { ...state, inputString: pt.inputString },
+    };
+  });
+
+  // Defensive: a snapshot saved before a new built-in example shipped shouldn't hide it.
+  BUILTIN_EXAMPLES.forEach((ex, i) => {
+    const id = `builtin-${i}`;
+    if (tabs.some((t) => t.id === id)) return;
+    tabs.splice(i, 0, { id, name: ex.tabName, isCustom: false, starterSource: ex.source, state: emptyExampleState() });
+  });
+
+  return tabs;
+}
+
+function initialState(): AppState {
+  const persisted = loadPersistedState();
+  if (!persisted) return defaultInitialState();
+  const tabs = reconcileTabs(persisted);
+  const activeTabId = tabs.some((t) => t.id === persisted.activeTabId) ? persisted.activeTabId : tabs[0].id;
+  return { activeTabId, tabs };
+}
+
+function toPersistedState(state: AppState): PersistedState {
+  return {
+    version: 1,
+    activeTabId: state.activeTabId,
+    tabs: state.tabs.map((t) => ({
+      id: t.id,
+      name: t.name,
+      isCustom: t.isCustom,
+      tsSourceText: t.state.tsSourceText,
+      inputString: t.state.inputString,
     })),
   };
 }
@@ -230,6 +285,11 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
+
+  useEffect(() => {
+    savePersistedState(toPersistedState(state));
+  }, [state]);
+
   const value = useMemo(() => {
     const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? state.tabs[0];
     return { state, activeTab, active: activeTab.state, dispatch };

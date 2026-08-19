@@ -39,6 +39,17 @@
   box-shadow: 0 0 0 5px var(--accent-ring);
 }
 
+.state-node--error {
+  border-color: var(--danger-text);
+  background: color-mix(in srgb, var(--danger-text) 8%, var(--node-bg));
+}
+
+.state-node--error.state-node--active {
+  border-color: var(--danger-text);
+  background: color-mix(in srgb, var(--danger-text) 14%, var(--node-bg));
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--danger-text) 22%, transparent);
+}
+
 .state-node__label {
   pointer-events: none;
 }

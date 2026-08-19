@@ -5,6 +5,7 @@ import { DiagramView } from "./components/DiagramView";
 import { InputRunner } from "./components/InputRunner";
 import { StateInspector } from "./components/StateInspector";
 import { ColorPicker } from "./components/ColorPicker";
+import { BackgroundColorPicker } from "./components/BackgroundColorPicker";
 import "./App.css";
 
 const STORAGE_KEY = "smv-left-width";
@@ -63,7 +64,10 @@ function AppShell() {
       <header className="app__header">
         <h1>State Machine Visualizer</h1>
         <p>Define a state machine in TypeScript, run a string through it, and watch each step.</p>
-        <ColorPicker />
+        <div className="app__header-tools">
+          <BackgroundColorPicker />
+          <ColorPicker />
+        </div>
       </header>
       <div className="app__body" style={{ "--left-width": `${leftWidth}px` } as CSSProperties}>
         <div className="app__panel app__panel--editor" role="region" aria-label="Machine editor">
