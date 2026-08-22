@@ -32,32 +32,39 @@ const compilerOptions: ts.CompilerOptions = {
  * declared, using TypeScript's own type checker rather than our hand-rolled grammar walk.
  */
 export function typeCheckTypeScript(source: string): TypeCheckError[] {
-  const sourceFile = ts.createSourceFile(FILE_NAME, source, ts.ScriptTarget.ES2017, true, ts.ScriptKind.TS);
+  try {
+    const sourceFile = ts.createSourceFile(FILE_NAME, source, ts.ScriptTarget.ES2017, true, ts.ScriptKind.TS);
 
-  const host: ts.CompilerHost = {
-    getSourceFile: (fileName) => {
-      if (fileName === FILE_NAME) return sourceFile;
-      if (fileName === LIB_NAME) return libSourceFile;
-      return undefined;
-    },
-    getDefaultLibFileName: () => LIB_NAME,
-    writeFile: () => {},
-    getCurrentDirectory: () => "",
-    getCanonicalFileName: (fileName) => fileName,
-    useCaseSensitiveFileNames: () => true,
-    getNewLine: () => "\n",
-    fileExists: (fileName) => fileName === FILE_NAME || fileName === LIB_NAME,
-    readFile: (fileName) => (fileName === FILE_NAME ? source : fileName === LIB_NAME ? libEs5Source : undefined),
-    directoryExists: () => true,
-    getDirectories: () => [],
-  };
+    const host: ts.CompilerHost = {
+      getSourceFile: (fileName) => {
+        if (fileName === FILE_NAME) return sourceFile;
+        if (fileName === LIB_NAME) return libSourceFile;
+        return undefined;
+      },
+      getDefaultLibFileName: () => LIB_NAME,
+      writeFile: () => {},
+      getCurrentDirectory: () => "",
+      getCanonicalFileName: (fileName) => fileName,
+      useCaseSensitiveFileNames: () => true,
+      getNewLine: () => "\n",
+      fileExists: (fileName) => fileName === FILE_NAME || fileName === LIB_NAME,
+      readFile: (fileName) => (fileName === FILE_NAME ? source : fileName === LIB_NAME ? libEs5Source : undefined),
+      directoryExists: () => true,
+      getDirectories: () => [],
+    };
 
-  const program = ts.createProgram([FILE_NAME, LIB_NAME], compilerOptions, host);
-  const diagnostics = [...program.getSyntacticDiagnostics(sourceFile), ...program.getSemanticDiagnostics(sourceFile)];
+    const program = ts.createProgram([FILE_NAME, LIB_NAME], compilerOptions, host);
+    const diagnostics = [...program.getSyntacticDiagnostics(sourceFile), ...program.getSemanticDiagnostics(sourceFile)];
 
-  return diagnostics.map((d) => {
-    const message = ts.flattenDiagnosticMessageText(d.messageText, "\n");
-    const line = d.file && d.start !== undefined ? d.file.getLineAndCharacterOfPosition(d.start).line + 1 : undefined;
-    return { message, line };
-  });
+    return diagnostics.map((d) => {
+      const message = ts.flattenDiagnosticMessageText(d.messageText, "\n");
+      const line = d.file && d.start !== undefined ? d.file.getLineAndCharacterOfPosition(d.start).line + 1 : undefined;
+      return { message, line };
+    });
+  } catch {
+    // TypeScript's own parser can stack-overflow on pathologically deep/repetitive nesting
+    // (thousands of unclosed braces/parens, etc.) — degrade to a normal error instead of crashing
+    // the whole app.
+    return [{ message: "The TypeScript checker couldn't process this source (it may be too deeply nested). Try simplifying it." }];
+  }
 }

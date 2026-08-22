@@ -8,26 +8,24 @@ import { ColorPicker } from "./components/ColorPicker";
 import { BackgroundColorPicker } from "./components/BackgroundColorPicker";
 import "./App.css";
 
-const STORAGE_KEY = "smv-left-width";
-const MIN_LEFT_WIDTH = 280;
-const MAX_LEFT_WIDTH = 720;
-const DEFAULT_LEFT_WIDTH = 380;
-
-function clampWidth(width: number): number {
-  return Math.min(MAX_LEFT_WIDTH, Math.max(MIN_LEFT_WIDTH, width));
+function clamp(width: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, width));
 }
 
-function readStoredWidth(): number {
-  const raw = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+function readStoredWidth(storageKey: string, min: number, max: number, defaultWidth: number): number {
+  const raw = typeof localStorage !== "undefined" ? localStorage.getItem(storageKey) : null;
   const parsed = raw ? Number(raw) : NaN;
-  return Number.isFinite(parsed) ? clampWidth(parsed) : DEFAULT_LEFT_WIDTH;
+  return Number.isFinite(parsed) ? clamp(parsed, min, max) : defaultWidth;
 }
 
-function AppShell() {
-  const { active } = useAppContext();
-  const [leftWidth, setLeftWidth] = useState(readStoredWidth);
+/**
+ * A draggable/keyboard-resizable panel width, persisted to localStorage. `invert` flips which
+ * direction growing the panel corresponds to — e.g. the right panel grows when its resizer is
+ * dragged *left*, the opposite of the left panel.
+ */
+function useResizableWidth(storageKey: string, min: number, max: number, defaultWidth: number, invert: boolean) {
+  const [width, setWidth] = useState(() => readStoredWidth(storageKey, min, max, defaultWidth));
   const draggingRef = useRef(false);
-  const hasError = Boolean(active.simulation?.erroredStep);
 
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     draggingRef.current = true;
@@ -36,28 +34,39 @@ function AppShell() {
 
   function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     if (!draggingRef.current) return;
-    setLeftWidth((w) => clampWidth(w + e.movementX));
+    const delta = invert ? -e.movementX : e.movementX;
+    setWidth((w) => clamp(w + delta, min, max));
   }
 
   function handlePointerUp() {
     if (!draggingRef.current) return;
     draggingRef.current = false;
-    localStorage.setItem(STORAGE_KEY, String(leftWidth));
+    localStorage.setItem(storageKey, String(width));
   }
 
-  function handleResizerKeyDown(e: React.KeyboardEvent) {
+  function handleKeyDown(e: React.KeyboardEvent) {
     const step = e.shiftKey ? 80 : 20;
     let next: number | null = null;
-    if (e.key === "ArrowLeft") next = leftWidth - step;
-    else if (e.key === "ArrowRight") next = leftWidth + step;
-    else if (e.key === "Home") next = MIN_LEFT_WIDTH;
-    else if (e.key === "End") next = MAX_LEFT_WIDTH;
+    if (e.key === "ArrowLeft") next = width + (invert ? step : -step);
+    else if (e.key === "ArrowRight") next = width + (invert ? -step : step);
+    else if (e.key === "Home") next = min;
+    else if (e.key === "End") next = max;
     if (next === null) return;
     e.preventDefault();
-    const clamped = clampWidth(next);
-    setLeftWidth(clamped);
-    localStorage.setItem(STORAGE_KEY, String(clamped));
+    const clamped = clamp(next, min, max);
+    setWidth(clamped);
+    localStorage.setItem(storageKey, String(clamped));
   }
+
+  return { width, handlePointerDown, handlePointerMove, handlePointerUp, handleKeyDown };
+}
+
+function AppShell() {
+  const { active } = useAppContext();
+  const hasError = Boolean(active.simulation?.erroredStep);
+
+  const left = useResizableWidth("smv-left-width", 280, 720, 380, false);
+  const right = useResizableWidth("smv-right-width", 280, 600, 340, true);
 
   return (
     <div className="app">
@@ -69,7 +78,10 @@ function AppShell() {
           <ColorPicker />
         </div>
       </header>
-      <div className="app__body" style={{ "--left-width": `${leftWidth}px` } as CSSProperties}>
+      <div
+        className="app__body"
+        style={{ "--left-width": `${left.width}px`, "--right-width": `${right.width}px` } as CSSProperties}
+      >
         <div className="app__panel app__panel--editor" role="region" aria-label="Machine editor">
           <TsEditor />
         </div>
@@ -78,19 +90,33 @@ function AppShell() {
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize editor panel"
-          aria-valuemin={MIN_LEFT_WIDTH}
-          aria-valuemax={MAX_LEFT_WIDTH}
-          aria-valuenow={leftWidth}
+          aria-valuemin={280}
+          aria-valuemax={720}
+          aria-valuenow={left.width}
           tabIndex={0}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onKeyDown={handleResizerKeyDown}
+          onPointerDown={left.handlePointerDown}
+          onPointerMove={left.handlePointerMove}
+          onPointerUp={left.handlePointerUp}
+          onKeyDown={left.handleKeyDown}
         />
         <div className="app__panel app__panel--diagram" role="region" aria-label="State diagram">
           <h2 className="sr-only">State diagram</h2>
           <DiagramView />
         </div>
+        <div
+          className="app__resizer focus-ring-inset"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize input panel"
+          aria-valuemin={280}
+          aria-valuemax={600}
+          aria-valuenow={right.width}
+          tabIndex={0}
+          onPointerDown={right.handlePointerDown}
+          onPointerMove={right.handlePointerMove}
+          onPointerUp={right.handlePointerUp}
+          onKeyDown={right.handleKeyDown}
+        />
         <div
           className={`app__panel app__panel--right${hasError ? " app__panel--right-error" : ""}`}
           role="region"

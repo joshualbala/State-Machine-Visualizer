@@ -1,5 +1,7 @@
-import { BaseEdge, EdgeLabelRenderer, useInternalNode, type Edge, type EdgeProps, type InternalNode, type Node } from "@xyflow/react";
+import { useCallback, useRef, useState } from "react";
+import { BaseEdge, EdgeLabelRenderer, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode, type Node } from "@xyflow/react";
 import { circleBoundaryPoint, polarPoint, type Point } from "../engine/nodeGeometry";
+import { closestTOnCurve, cubicBezierPoint, quadraticBezierPoint } from "../engine/bezier";
 
 export interface TransitionEdgeData {
   label: string;
@@ -28,8 +30,25 @@ function nodeCenterAndRadius(node: InternalNode<Node>): { center: Point; radius:
   };
 }
 
+interface QuadraticGeometry {
+  kind: "quadratic";
+  p0: Point;
+  control: Point;
+  p1: Point;
+}
+
+interface CubicGeometry {
+  kind: "cubic";
+  p0: Point;
+  c1: Point;
+  c2: Point;
+  p1: Point;
+}
+
+type EdgeGeometryPoints = QuadraticGeometry | CubicGeometry;
+
 /** Both ends anchored on the node's own rim, fanned around the top by lane so multiple self-loops don't stack. */
-function selfLoopPath(center: Point, radius: number, offsetIndex: number) {
+function selfLoopGeometry(center: Point, radius: number, offsetIndex: number): CubicGeometry {
   const loopCenterAngle = offsetIndex * SELF_LOOP_SPAN_DEG;
   const p1 = polarPoint(center, radius, loopCenterAngle - SELF_LOOP_GAP_DEG);
   const p2 = polarPoint(center, radius, loopCenterAngle + SELF_LOOP_GAP_DEG);
@@ -37,8 +56,7 @@ function selfLoopPath(center: Point, radius: number, offsetIndex: number) {
   const outward = { x: Math.sin(dirRad), y: -Math.cos(dirRad) };
   const c1 = { x: p1.x + outward.x * SELF_LOOP_HEIGHT, y: p1.y + outward.y * SELF_LOOP_HEIGHT };
   const c2 = { x: p2.x + outward.x * SELF_LOOP_HEIGHT, y: p2.y + outward.y * SELF_LOOP_HEIGHT };
-  const path = `M ${p1.x} ${p1.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`;
-  return { path, labelX: (c1.x + c2.x) / 2, labelY: (c1.y + c2.y) / 2 };
+  return { kind: "cubic", p0: p1, c1, c2, p1: p2 };
 }
 
 /**
@@ -47,14 +65,14 @@ function selfLoopPath(center: Point, radius: number, offsetIndex: number) {
  * spot. The rotation and bow are derived from a canonical (direction-independent) vector between
  * the two nodes so an A->B edge and a B->A edge sharing a lane bow to the same side.
  */
-function parallelEdgePath(
+function parallelEdgeGeometry(
   sourceCenter: Point,
   sourceRadius: number,
   targetCenter: Point,
   targetRadius: number,
   offsetIndex: number,
   flip: boolean
-) {
+): QuadraticGeometry {
   const theta = offsetIndex * LANE_ANGLE_STEP;
   const canonical: Point = flip
     ? { x: sourceCenter.x - targetCenter.x, y: sourceCenter.y - targetCenter.y }
@@ -75,34 +93,79 @@ function parallelEdgePath(
   const canonicalLen = Math.hypot(canonical.x, canonical.y) || 1;
   const perp = { x: -canonical.y / canonicalLen, y: canonical.x / canonicalLen };
   const bow = offsetIndex * LANE_BOW;
-  const midX = (sourcePoint.x + targetPoint.x) / 2 + perp.x * bow;
-  const midY = (sourcePoint.y + targetPoint.y) / 2 + perp.y * bow;
+  const control = {
+    x: (sourcePoint.x + targetPoint.x) / 2 + perp.x * bow,
+    y: (sourcePoint.y + targetPoint.y) / 2 + perp.y * bow,
+  };
 
-  const path = `M ${sourcePoint.x} ${sourcePoint.y} Q ${midX} ${midY} ${targetPoint.x} ${targetPoint.y}`;
-  return { path, labelX: midX, labelY: midY };
+  return { kind: "quadratic", p0: sourcePoint, control, p1: targetPoint };
+}
+
+function pathFor(geo: EdgeGeometryPoints): string {
+  return geo.kind === "quadratic"
+    ? `M ${geo.p0.x} ${geo.p0.y} Q ${geo.control.x} ${geo.control.y} ${geo.p1.x} ${geo.p1.y}`
+    : `M ${geo.p0.x} ${geo.p0.y} C ${geo.c1.x} ${geo.c1.y}, ${geo.c2.x} ${geo.c2.y}, ${geo.p1.x} ${geo.p1.y}`;
+}
+
+function sampleAt(geo: EdgeGeometryPoints, t: number): Point {
+  return geo.kind === "quadratic"
+    ? quadraticBezierPoint(geo.p0, geo.control, geo.p1, t)
+    : cubicBezierPoint(geo.p0, geo.c1, geo.c2, geo.p1, t);
 }
 
 export function TransitionEdge({ id, source, target, data, markerEnd }: EdgeProps<TransitionFlowEdge>) {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
+  const { screenToFlowPosition } = useReactFlow();
+  const [labelT, setLabelT] = useState(0.5);
+  const draggingRef = useRef(false);
 
-  if (!data || !sourceNode || !targetNode) return null;
+  let geo: EdgeGeometryPoints | null = null;
+  if (sourceNode && targetNode && data) {
+    const src = nodeCenterAndRadius(sourceNode);
+    const tgt = nodeCenterAndRadius(targetNode);
+    geo = data.isSelfLoop
+      ? selfLoopGeometry(src.center, src.radius, data.offsetIndex)
+      : parallelEdgeGeometry(src.center, src.radius, tgt.center, tgt.radius, data.offsetIndex, data.flip);
+  }
+
+  const handleLabelPointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    draggingRef.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const handleLabelPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!draggingRef.current || !geo) return;
+      const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      setLabelT(closestTOnCurve((t) => sampleAt(geo, t), flowPos));
+    },
+    [geo, screenToFlowPosition]
+  );
+
+  const handleLabelPointerUp = useCallback((e: React.PointerEvent) => {
+    draggingRef.current = false;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  }, []);
+
+  if (!data || !geo) return null;
   const active = data.active;
-
-  const src = nodeCenterAndRadius(sourceNode);
-  const tgt = nodeCenterAndRadius(targetNode);
-
-  const { path, labelX, labelY } = data.isSelfLoop
-    ? selfLoopPath(src.center, src.radius, data.offsetIndex)
-    : parallelEdgePath(src.center, src.radius, tgt.center, tgt.radius, data.offsetIndex, data.flip);
+  const path = pathFor(geo);
+  const labelPoint = sampleAt(geo, labelT);
 
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} className={`transition-edge${active ? " transition-edge--active" : ""}`} />
       <EdgeLabelRenderer>
         <div
-          className={`transition-edge__label${active ? " transition-edge__label--active" : ""}`}
-          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          className={`transition-edge__label nopan nodrag${active ? " transition-edge__label--active" : ""}`}
+          style={{ transform: `translate(-50%, -50%) translate(${labelPoint.x}px, ${labelPoint.y}px)` }}
+          onPointerDown={handleLabelPointerDown}
+          onPointerMove={handleLabelPointerMove}
+          onPointerUp={handleLabelPointerUp}
+          title="Drag along the edge"
         >
           {data.label}
         </div>

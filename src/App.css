@@ -35,7 +35,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: var(--left-width, 380px) 6px 1fr 340px;
+  grid-template-columns: var(--left-width, 380px) 6px 1fr 6px var(--right-width, 340px);
   grid-template-rows: 1fr;
   gap: 1px;
   background: var(--border);
